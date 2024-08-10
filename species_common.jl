@@ -1,24 +1,16 @@
-using Statistics
-using StaticArrays
+
 using Dispersal
-using XLSX
-using TerminalPager
-using Rasters
-using GLMakie
-using NCDatasets
-using Geomorphometry
-using Stencils
-using Statistics
-using Setfield
-using ConstructionBase
 using JLD2
+using StaticArrays
+using Statistics
+using Stencils
 
 island_keys = NamedTuple{(:mus, :reu, :rod)}((:mus, :reu, :rod))
 
 # includet("optimisation.jl")
+include("raster_common.jl")
 include("species_rules.jl")
 include("species_tables.jl")
-include("raster_common.jl")
 # forested = gpu_cleanup(modify(BitArray, Raster("forested.nc")))
 # Set aggregation
 aggfactor = 16
@@ -37,6 +29,7 @@ lc_predictions_paths = (
 sim_setup_file = "sym_setupj$aggfactor.jld2"
 
 auxs = if isfile(sim_setup_file)
+    println("Loading and aux data from jld...")
     let
         f = jldopen(sim_setup_file, "r")
         # pred_pops_aux = f["pred_pops_aux"];
@@ -45,6 +38,7 @@ auxs = if isfile(sim_setup_file)
         auxs
     end
 else
+    println("Loading and aggregating aux data manually...")
     let
         # netcdf has the annoying center locus for time
         lc_predictions = map(lc_predictions_paths) do path

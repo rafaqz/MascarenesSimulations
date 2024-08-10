@@ -1,33 +1,35 @@
 println("Loading packages...")
-using GeoJSON
+
+using ArchGDAL
+using DimensionalData
 using GeoInterface
 using GeometryBasics
 using GADM
-using Shapefile
-using RasterDataSources
+using Extents
 using Rasters
-using Rasters: Between, trim, Band
+using RasterDataSources
+using Tables
 using Unitful
-using Distributions
-using DimensionalData
+
 using DimensionalData.LookupArrays
+using Rasters: Between, trim, Band
 
 println("Loading functions...")
-includet("common.jl")
-includet("slope.jl")
-includet("functions.jl")
-# includet("lost_land_images.jl")
+include("common.jl")
 
 years = 1638, 1773, 1835, 1872, 1935, "present"
 lc_years = 1638, 1773, 1835, 1872, 1935, "present"
 lc_year_keys = map(y -> "lc_$y", lc_years)
 
 println("Getting borders...")
-gdal_borders = (
-    mus=GADM.get("MUS").geom[1],
-    reu=GADM.get("REU").geom[1],
-    rod=GADM.get("MUS").geom[1],
-)
+mus = GADM.get("MUS")
+gdal_borders = map((
+    mus=GADM.get("MUS"),
+    reu=GADM.get("REU"),
+    rod=GADM.get("MUS"),
+)) do table
+    Tables.columntable(table).geom[1]
+end
 borders = (
    mus=GeoInterface.convert(GeometryBasics, gdal_borders.mus),
    reu=GeoInterface.convert(GeometryBasics, gdal_borders.reu),
@@ -51,7 +53,6 @@ println("Getting DEMs...")
 m1 = view(dem1, border_selectors.mus...)
 m2 = view(dem2, border_selectors.mus...)
 mus_dem = replace_missing(trim(cat(m1, m2; dims=Y); pad=10))
-# Plots.plot(mauritius_dem)
 reu_tile  = getraster(SRTM; bounds=island_bounds.reu)[1]
 reu_dem = replace_missing(trim(view(Raster(reu_tile), border_selectors.reu...); pad=10))
 rod_tile = getraster(SRTM; bounds=island_bounds.rod)[1]
@@ -59,15 +60,9 @@ rod_dem = replace_missing(trim(view(Raster(rod_tile), border_selectors.rod...); 
 dems = map(fix_order, (mus=mus_dem, reu=reu_dem, rod=rod_dem))
 elevation = map(d -> d .* u"m", dems)
 
-# mauritius_proj_dem = Raster("/home/raf/PhD/Mascarenes/Data/Norder/LS factor/DEM/DEM100x100_Resample.img"; crs=EPSG(3337))
-# mauritius_proj_dem = rebuild(mauritius_proj_dem; missingval=minimum(mauritius_proj_dem))
-
 masks = map(d -> rebuild(boolmask(d); name=:mask), dems)
-println("Calculating slope...")
-slope_stacks = map(dems) do dem
-    slopeaspect(dem, FD3Linear(); cellsize=111.0)
-end
 
+println("Getting native vegetation...")
 mus_native_veg_tif_path = "/home/raf/PhD/Mascarenes/Data/Generated/mus_native_veg.tif"
 reu_native_veg_tif_path = "/home/raf/PhD/Mascarenes/Data/Generated/reu_all_natives.tif"
 native_veg = (;
@@ -82,7 +77,6 @@ original_veg = (;
     reu=reorder(resample(replace_missing(Raster(reu_veg_path), 0); to=masks.reu), masks.reu),
 )
 
-using Rasters, Plots, ArchGDAL, Extents
 mus_rod_pop_density = Raster("/home/raf/PhD/Mascarenes/Data/Population/raster/population_mus_2018-10-01.tif"; lazy=true)
 reu_pop_density = Raster("/home/raf/PhD/Mascarenes/Data/Population/raster/population_reu_2018-10-01.tif"; lazy=true)
 pop_density = map(fix_order, (
