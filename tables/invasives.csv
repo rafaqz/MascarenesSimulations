@@ -1,0 +1,8 @@
+name,scientific,mass,carrycap,mean_prey_mass,rmax,max_density,sources,notes,
+cat,Felus catus,2884.8,0.0025,0.41,0.99,0.08,Lohr (2017) Maas (1998),,
+norway_rat,Rattus norvegicus,338.33,25,,2.7,15,,rmax and max_density are made up,
+black_rat,Rattus rattus,229.13,35,,3.5,30,Lohr (2017),arrival before europeans in mus and rod so is uncertain,
+mouse,Mus musculus,40,52,,4.7,52,,rmax is made up max_density from Le Corre (2015),
+pig,Sus scrofa,96118.09,0.02,,0.58,0.3,Zivin (2000) Lewis (2017),~30/km2 maximum is common in forsests on tropical islands,
+wolf_snake,Lycodon aulicus,,10,,2,20,,rmax and max_density are made up, prey mas taken from Fritts 1993 diet estimates (geckos 48% mice 30% skinks 22%)
+macaque,Macaca fascicularis,3991.5,0.5,,0.22,1.33,Ross 1992 + Santosa et al 2012, 0.33 in native habitats while 1.33 in disturbed habitats in mauritius,
