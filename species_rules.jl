@@ -5,6 +5,7 @@ using ModelParameters
 using StaticArrays
 using Distributions
 using Setfield
+using ThreadsX
 
 const DG = DynamicGrids
 const DD = DimensionalData
@@ -110,7 +111,7 @@ end
     end
     return updated_presence
 end
-
+# This version tracks extinction causes in a separate grid
 @inline function DynamicGrids.applyrule(data, rule::ExtirpationRisks{Grids,Grids}, (endemic_presences, causes), I) where Grids<:Tuple
     recouperation_rates = get(data, rule.recouperation_rates)
 

@@ -5,31 +5,36 @@ using StaticArrays
 using Statistics
 using Stencils
 
-island_keys = NamedTuple{(:mus, :reu, :rod)}((:mus, :reu, :rod))
-
 # includet("optimisation.jl")
 include("raster_common.jl")
 include("species_rules.jl")
 include("species_tables.jl")
-# forested = gpu_cleanup(modify(BitArray, Raster("forested.nc")))
-# Set aggregation
-aggfactor = 16
-# And the last year of the simulation
-first_year = 1550
-last_year = 2018
-extant_extension = 0
 
-# Build auxiliary rasters
+# landcover paths
 lc_predictions_paths = (
     mus="$outputdir/lc_predictions_mus.nc",
     reu="$outputdir/lc_predictions_reu.nc",
     rod="$outputdir/lc_predictions_rod.nc",
 )
 
-sim_setup_file = "sym_setupj$aggfactor.jld2"
+island_keys = NamedTuple{(:mus, :reu, :rod)}((:mus, :reu, :rod))
+
+# forested = gpu_cleanup(modify(BitArray, Raster("forested.nc")))
+
+# Set aggregation
+aggfactor = 16
+
+# And the last year of the simulation
+first_year = 1550
+last_year = 2018
+extant_extension = 0
+
+
+# Build auxiliary rasters
+sim_setup_file = "cache/sym_setup_$aggfactor.jld2"
 
 auxs = if isfile(sim_setup_file)
-    println("Loading and aux data from jld...")
+    println("Loading aux data from jld...")
     let
         f = jldopen(sim_setup_file, "r")
         # pred_pops_aux = f["pred_pops_aux"];
@@ -61,8 +66,8 @@ else
     end
 end
 
-# just for makie visualisation, kind of merges the pixel colors...
-lc_all = map(auxs) do aux
+# Merge landcover to a single layer for makie visualisation
+lc_graphic = map(auxs) do aux
     map(aux.lc) do lcs
         sum(map(.*, ntuple(UInt8, length(lcs)), lcs))
     end

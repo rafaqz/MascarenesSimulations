@@ -8,7 +8,7 @@ include("common.jl")
 pred_df = CSV.read("tables/invasives.csv", DataFrame)
 introductions_df = CSV.read("tables/introductions.csv", DataFrame)
 mascarene_species_csv = "tables/mascarene_species.csv"
-# @async run(`libreoffice $mascarene_species_csv`)
+
 all_species = CSV.read(mascarene_species_csv, DataFrame) |> 
     x -> subset(x, :Species => ByRow(!ismissing); skipmissing=true)
 endemic_species = CSV.read(mascarene_species_csv, DataFrame) |> 
