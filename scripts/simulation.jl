@@ -1,4 +1,5 @@
-# Force remove master environment
+# Force remove master environment before activate
+# to make sure it works
 # deleteat!(Base.LOAD_PATH, 2:3)
 
 using MascarenesSimulations
