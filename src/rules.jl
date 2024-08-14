@@ -1,18 +1,3 @@
-using DynamicGrids
-using Dispersal
-using LandscapeChange
-using ModelParameters
-using StaticArrays
-using Distributions
-using Setfield
-using ThreadsX
-
-const DG = DynamicGrids
-const DD = DimensionalData
-const NV = NamedVector
-
-include("functions.jl")
-
 # Struct rules
 
 struct InteractiveCarryCap{R,W,CC,CS,I} <: Dispersal.GrowthRule{R,W}

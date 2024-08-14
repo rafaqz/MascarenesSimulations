@@ -3,7 +3,7 @@
 
 using MascarenesSimulations
 using DynamicGrids
-
+using GLMakie
 
 # Settings
 
@@ -55,11 +55,10 @@ auxs = load_aux(; masks, landcover_paths, aggfactor, last_year)
 # Run
 @time sim!(output, ruleset; proc=SingleCPU(), printframe=true);
 
-
 # Makie visual simulations
-
 lc_graphic = graphic_landcover(auxs)
 mkoutput = makie_sim(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
+
 
 # If you need to debug performance
 # you should get over 20 frames a second for all pred + endemic rules
