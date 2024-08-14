@@ -5,9 +5,9 @@ using ConstructionBase
 include("common.jl")
 
 # Import tabular data
-pred_df = CSV.read("tables/invasives.csv", DataFrame)
-introductions_df = CSV.read("tables/introductions.csv", DataFrame)
-mascarene_species_csv = "tables/mascarene_species.csv"
+pred_df = CSV.read("../tables/invasives.csv", DataFrame)
+introductions_df = CSV.read("../tables/introductions.csv", DataFrame)
+mascarene_species_csv = "../tables/mascarene_species.csv"
 
 all_species = CSV.read(mascarene_species_csv, DataFrame) |> 
     x -> subset(x, :Species => ByRow(!ismissing); skipmissing=true)

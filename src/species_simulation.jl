@@ -55,7 +55,7 @@ mkoutput = mk(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
 # Endemic-only sims
 
 # Simulate and store invasive predator population dynamics
-# pred_pop_jld = "cache/pred_pops_$aggfactor.jld2"
+# pred_pop_jld = "../cache/pred_pops_$aggfactor.jld2"
 # if isfile(pred_pop_jld)
 #     _jld = jldopen(pred_pop_jld, "r")
 #     pred_pops_aux = _jld["pred_pops_aux"];
