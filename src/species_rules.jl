@@ -196,10 +196,9 @@ function predator_suceptibility(pred_response, traits)
     end ./ (32 * 8^2)
 end
 
-
 # Define shorthand rules, inits and aux data
 
-function def_syms(
+function define_simulations(
     pred_df, introductions_df, island_endemic_tables, auxs, aggfactor;
     aggscale = aggfactor^2,
     replicates=nothing,
@@ -215,7 +214,7 @@ function def_syms(
             NamedVector{ek,length(ek)}
         end
     end,
-    island_extinction_dates = extinction_dates_from_tables(island_endemic_tables, EndemicNVs, island_keys, extant_extension),
+    island_extinction_dates = extinction_dates_from_tables(island_endemic_tables, EndemicNVs, island_keys; last_year, extant_extension),
     mean_prey_mass = (;
         cat =        (41.0, 51.0), # Pearre and Maaas 1998
         black_rat =  (10.0, 10.0), # made up
@@ -362,6 +361,8 @@ function def_syms(
         map(_ -> carrycap, aux.mask)
     end
 
+
+    # Rules
     pred_carrycap_rule = InteractiveCarryCap{:pred_pop,:pred_carrycap}(;
         carrycap,
         carrycap_scaling=map(Val, pred_funcs),
@@ -407,24 +408,25 @@ function def_syms(
         end
     end
 
-    habitat = let native=Aux{:native}()
-        Cell{:presences}() do data, presences, I
-            hp = get(data, native, I)
-            habitat_requirement = DG.aux(data).habitat_requirement
-            map(presences, habitat_requirement) do present, hs
-                if present
-                    rand() < hp * hs
-                else
-                    false
-                end
-            end
-        end
-    end
+    # habitat = let native=Aux{:native}()
+    #     Cell{:presences}() do data, presences, I
+    #         hp = get(data, native, I)
+    #         habitat_requirement = DG.aux(data).habitat_requirement
+    #         map(presences, habitat_requirement) do present, hs
+    #             if present
+    #                 rand() < hp * hs
+    #             else
+    #                 false
+    #             end
+    #         end
+    #     end
+    # end
 
     clearing_rule = let landcover=Aux{:landcover}()
         Cell{:endemic_presence}() do data, presences, I
             lc = get(data, landcover, I)
-            presences .& (lc.native > 0.2f0)
+            # 20% native and below kills everything
+            presences .& (lc.native > 0.2f0) 
         end
     end
 
@@ -514,6 +516,7 @@ function def_syms(
         stochastic_extirpation=0.005f0/aggfactor,
         recouperation_rates=Aux{:recouperation_rates}(),
     )
+
     tspans = map(introductions) do intros
         first_year:last_year
     end
@@ -542,7 +545,8 @@ function def_syms(
 
     ruleset = Ruleset(
         DynamicGrids.rules(pred_ruleset)...,
-        risks_rule, clearing_rule;
+        risks_rule, 
+        clearing_rule;
         boundary=Remove()
     )
 
@@ -562,7 +566,9 @@ function def_syms(
         isnothing(pred_pop) ? nothing : generate_predator_effect(risks_rule.f, pred_pop, pred_suscept)
     end
 
-    outputs_kw = map(island_names, tspans, auxs, pred_pops_aux, island_endemic_traits, pred_effects, island_recouperation_rates) do island, tspan, aux1, pred_pop, endemic_traits, pred_effect, recouperation_rates
+    outputs_kw = map(
+        island_names, tspans, auxs, pred_pops_aux, island_endemic_traits, pred_effects, island_recouperation_rates
+    ) do island, tspan, aux1, pred_pop, endemic_traits, pred_effect, recouperation_rates
         aux = (;
             introductions=getproperty(introductions, island),
             # habitat_requirement=endemictraits.habitat_requirements,

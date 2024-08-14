@@ -1,3 +1,8 @@
+name = "MascarenesSimulations"
+uuid = "7169809a-d700-4819-afa6-9f428ceca439"
+authors = ["Rafael Schouten <rafaelschouten@gmail.com>"]
+version = "0.1.0"
+
 [deps]
 ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -16,6 +21,7 @@ GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LandscapeChange = "10a95938-cbff-4ff0-a2a3-33d289cf79a5"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 ModelParameters = "4744a3fa-6c31-4707-899e-a3298e4618ad"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 RasterDataSources = "3cb90ccd-e1b6-4867-9617-4276c8b2ca36"

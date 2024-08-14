@@ -1,28 +1,43 @@
 # Force remove master environment
 # deleteat!(Base.LOAD_PATH, 2:3)
 
-include("species_common.jl")
-include("species_tables.jl")
-include("species_rules.jl")
-include("makie.jl")
+using MascarenesSimulations
+using DynamicGrids
 
-# pred_keys = (:cat, :black_rat, :norway_rat, :mouse, :pig, :macaque)
-pred_keys = (:cat, :black_rat, :norway_rat)
 
-EndemicNVs = map(island_endemic_tables) do endemic_table
-    ek = Tuple(Symbol.(replace.(endemic_table.Species, Ref(' ' => '_'))))
-    NamedVector{ek,length(ek)}
-end
+# Settings
 
-# Run full invasive/endemic simulations
+aggfactor = 16
+first_year = 1550
+last_year = 2018
+extant_extension = 0
 
-# Choose and island
+# Choose predator subset
+pred_keys = (:cat, :black_rat, :norway_rat) # (:cat, :black_rat, :norway_rat, :mouse, :pig, :macaque)
+
+# Choose an island
 k = :reu
 k = :rod
 k = :mus
 
-# Defin rules and outputs
-(; ruleset, rules, pred_ruleset, endemic_ruleset, islands) = def_syms(
+# Landcover paths
+datadir = "/home/raf/PhD/Mascarenes/Data/Generated"
+
+landcover_paths = (
+    mus="$datadir/lc_predictions_mus.nc",
+    reu="$datadir/lc_predictions_reu.nc",
+    rod="$datadir/lc_predictions_rod.nc",
+)
+
+# Load data
+(; pred_df, introductions_df, island_names, island_endemic_names, island_tables, island_endemic_tables) = load_tables()
+(; borders, masks, elevation, dems) = load_rasters()
+auxs = load_aux(; masks, landcover_paths, aggfactor, last_year)
+
+# Run full invasive/endemic simulations
+
+# Define rules and outputs
+(; ruleset, rules, pred_ruleset, endemic_ruleset, islands) = define_simulations(
     pred_df, 
     introductions_df, 
     island_endemic_tables, 
@@ -37,9 +52,14 @@ k = :mus
 );
 (; output, endemic_output, pred_output, init, output_kw) = islands[k];
 
+# Run
 @time sim!(output, ruleset; proc=SingleCPU(), printframe=true);
 
-mkoutput = mk(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
+
+# Makie visual simulations
+
+lc_graphic = graphic_landcover(auxs)
+mkoutput = makie_sim(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
 
 # If you need to debug performance
 # you should get over 20 frames a second for all pred + endemic rules
@@ -52,6 +72,7 @@ mkoutput = mk(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
 
 
 
+
 # Endemic-only sims
 
 # Simulate and store invasive predator population dynamics
@@ -61,7 +82,7 @@ mkoutput = mk(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
 #     pred_pops_aux = _jld["pred_pops_aux"];
 #     close(_jld)
 # else
-#     (; ruleset, rules, pred_ruleset, endemic_ruleset, islands, pred_response) = def_syms(
+#     (; ruleset, rules, pred_ruleset, endemic_ruleset, islands, pred_response) = define_simulations(
 #         pred_df, introductions_df, island_endemic_tables, auxs, aggfactor; 
 #         replicates=nothing, pred_keys, first_year, last_year, extant_extension,
 #         pred_pops_aux = map(_ -> nothing, dems),
@@ -78,7 +99,7 @@ mkoutput = mk(init, ruleset; landcover=lc_graphic[k], output_kw..., ncolumns=4)
 # end
 # sum(getproperty.(pred_pops_aux.rod[Ti=At(2009)], :cat))
 
-# (; ruleset, rules, pred_ruleset, endemic_ruleset, islands) = def_syms(
+# (; ruleset, rules, pred_ruleset, endemic_ruleset, islands) = define_simulations(
 #     pred_df, 
 #     introductions_df, 
 #     island_endemic_tables, 

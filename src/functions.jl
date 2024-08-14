@@ -147,7 +147,7 @@ function extinction_dates_from_sim(timeline, island, obs=nothing;
     return (years=extinction_years, mean=ext_mean, std=ext_std)
 end
 
-function extinction_dates_from_tables(tables, EndemicNVs, island_keys, extant_extension)
+function extinction_dates_from_tables(tables, EndemicNVs, island_keys; last_year, extant_extension)
     # Extract extinction dates
     map(tables, EndemicNVs, island_keys) do table, EndemicNV, key
         map(table[!, Symbol(key, :_extinct)]) do x

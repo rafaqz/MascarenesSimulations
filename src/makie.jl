@@ -1,12 +1,8 @@
-using GLMakie
-using ColorSchemes
-using Colors
-
 Makie.set_theme!(theme_light())
 
 const COLORMAPS = [:reds, :blues, :greens, :magma, :viridis, :cividis, :inferno, :delta, :seaborn_icefire_gradient, :seaborn_rocket_gradient, :hot]
 
-function mk(init, ruleset; maxpops=zero(eltype(init.pred_pop)), landcover=nothing, tspan, kw...)
+function makie_sim(init, ruleset; maxpops=zero(eltype(init.pred_pop)), landcover=nothing, tspan, kw...)
     MakieOutput(init;
         kw...,
         tspan,
