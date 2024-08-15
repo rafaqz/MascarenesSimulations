@@ -6,6 +6,8 @@ using MascarenesSimulations
 using DynamicGrids
 using GLMakie
 
+basepath = realpath(joinpath(dirname(pathof(MascarenesSimulations)), ".."))
+
 # Settings
 
 aggfactor = 16
@@ -21,13 +23,10 @@ k = :reu
 k = :rod
 k = :mus
 
-# Landcover paths
-datadir = "/home/raf/PhD/Mascarenes/Data/Generated"
-
 landcover_paths = (
-    mus="$datadir/lc_predictions_mus.nc",
-    reu="$datadir/lc_predictions_reu.nc",
-    rod="$datadir/lc_predictions_rod.nc",
+    mus="$basepath/data/lc_predictions_mus.nc",
+    reu="$basepath/data/lc_predictions_reu.nc",
+    rod="$basepath/data/lc_predictions_rod.nc",
 )
 
 # Load data
@@ -54,7 +53,7 @@ auxs = load_aux(; masks, landcover_paths, aggfactor, last_year)
 (; output, endemic_output, pred_output, init, output_kw) = islands[k];
 
 # Run
-@time sim!(output, ruleset; proc=SingleCPU(), printframe=true);
+@time sim!(output, ruleset; printframe=true);
 
 # Makie visual simulations
 lc_graphic = graphic_landcover(auxs)

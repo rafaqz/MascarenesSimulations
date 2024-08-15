@@ -2,8 +2,6 @@ using CSV
 using DataFrames
 using ConstructionBase
 
-include("common.jl")
-
 function load_tables()
     # Import tabular data
     tables_path = realpath(joinpath(dirname(pathof(MascarenesSimulations)), "../tables"))

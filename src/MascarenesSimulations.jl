@@ -39,6 +39,7 @@ export define_simulations
 
 export makie_sim
 
+include("common.jl")
 include("functions.jl")
 include("aux.jl")
 include("rules.jl")
