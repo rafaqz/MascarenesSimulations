@@ -39,6 +39,8 @@ export define_simulations
 
 export makie_sim
 
+const basepath = realpath(joinpath(@__DIR__, ".."))
+
 include("common.jl")
 include("functions.jl")
 include("aux.jl")
