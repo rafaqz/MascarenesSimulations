@@ -5,9 +5,9 @@
 using MascarenesSimulations
 using DynamicGrids
 using GLMakie
+using Revise
 
-basepath = realpath(joinpath(dirname(pathof(MascarenesSimulations)), ".."))
-
+basepath = MascarenesSimulations.basepath
 # Settings
 
 aggfactor = 16
@@ -24,15 +24,15 @@ k = :rod
 k = :mus
 
 landcover_paths = (
-    mus="$basepath/data/lc_predictions_mus.nc",
-    reu="$basepath/data/lc_predictions_reu.nc",
-    rod="$basepath/data/lc_predictions_rod.nc",
+    mus=joinpath(basepath, "data/lc_predictions_mus.nc"),
+    reu=joinpath(basepath, "data/lc_predictions_reu.nc"),
+    rod=joinpath(basepath, "data/lc_predictions_rod.nc"),
 )
 
 # Load data
 (; pred_df, introductions_df, island_names, island_endemic_names, island_tables, island_endemic_tables) = load_tables()
 (; borders, masks, elevation, dems) = load_rasters()
-auxs = load_aux(; masks, landcover_paths, aggfactor, last_year)
+auxs = load_aux(; masks, dems, landcover_paths, aggfactor, last_year)
 
 # Run full invasive/endemic simulations
 
