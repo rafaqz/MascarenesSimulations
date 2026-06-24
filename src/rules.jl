@@ -161,158 +161,90 @@ function predator_susceptibility(pred_response, traits)
     end ./ PRED_SUSCEPT_NORM
 end
 
-# Define shorthand rules, inits and aux data
+# ---------------------------------------------------------------------------
+# build_rules — island-independent rules and rulesets
+# ---------------------------------------------------------------------------
 
-function define_simulations(
-    pred_df, introductions_df, island_endemic_tables, auxs, aggfactor;
+function build_rules(pred_df, aggfactor;
     aggscale = aggfactor^2,
-    replicates=nothing,
-    pred_pops_aux,
-    island_keys = NamedTuple{keys(island_endemic_tables)}(keys(island_endemic_tables)),
-    first_year, last_year,
-    extant_extension,
-    pred_keys=(:cat, :black_rat, :norway_rat, :mouse, :pig, :wolf_snake, :macaque),
-    pred_response=predator_response_params(pred_keys),
-    EndemicNVs = begin
-        map(island_endemic_tables) do endemic_table
-            ek = Tuple(Symbol.(replace.(endemic_table.Species, Ref(' ' => '_'))))
-            NamedVector{ek,length(ek)}
-        end
-    end,
-    island_extinction_dates = extinction_dates_from_tables(island_endemic_tables, EndemicNVs, island_keys; last_year, extant_extension),
+    pred_keys = (:cat, :black_rat, :norway_rat, :mouse, :pig, :wolf_snake, :macaque),
+    pred_response = predator_response_params(pred_keys),
+    # Prey-mass data (Pearre & Maaas 1998 for cats; estimates for the rest)
     mean_prey_mass = (;
-        cat =        (41.0, 51.0),  # Pearre and Maaas 1998
-        black_rat =  (10.0, 10.0),  # made up
-        norway_rat = (8.0,  8.0),   # made up
-        mouse =      (3.0,  5.0),   # made up
-        pig =        (100.0, 100.0), # made up
+        cat =        (41.0, 51.0),
+        black_rat =  (10.0, 10.0),
+        norway_rat = (8.0,  8.0),
+        mouse =      (3.0,  5.0),
+        pig =        (100.0, 100.0),
         wolf_snake = (9.0,  7.0),   # Estimated from Fritts 1993
-        macaque =    (40.0, 40.0),  # made up
+        macaque =    (40.0, 40.0),
     )[pred_keys],
-    island_mass_response = map(island_endemic_tables, EndemicNVs) do table, EndemicNV
-        endemic_mass = EndemicNV(table.Mass)
-        map(mean_prey_mass) do (mean, std)
-            dist = Distributions.Normal(mean, 2std) # Doubled because of the skew
-            scalar = 1 / pdf(dist, mean)
-            map(endemic_mass) do pm
-                pdf(dist, pm) * scalar
-            end
-        end
-    end,
-    # TODO: This is made up
-    island_recuperation_rates = map(EndemicNVs) do EndemicNV
-        Float32.(ones(EndemicNV) .* 1.0)
-    end,
-    # These are taken from the literature in contexts where it seems also applicable to the Mascarenes
+    # Carrying capacities from Harper & Bunbury 2015 and literature estimates
     carrycap = Float32.(NV(;
         cat =        0.01,
-        black_rat =  30.0,  # This may be up to 100/ha? See Harper & Bunbury 2015.
-        norway_rat = 15.0,  # This one is more of a guess
+        black_rat =  30.0,   # may be up to 100/ha — Harper & Bunbury 2015
+        norway_rat = 15.0,
         mouse =      52.0,
-        pig =        0.02,  # Tuned to have ~600 total in mauritius in 2009 (actually 714, more significant digits are not justifiable).
-        wolf_snake = 10.0,  # As is this one
+        pig =        0.02,   # tuned to ~600 in Mauritius 2009
+        wolf_snake = 10.0,
         macaque =    0.5,
     ) .* aggscale)[pred_keys],
     spread_rate = NV(;
-        cat =         20.0f0,
+        cat =        20.0f0,
         black_rat =   1.0f0,
         norway_rat =  1.0f0,
         mouse =       0.5f0,
-        pig =         100.0f0,
+        pig =        100.0f0,
         wolf_snake =  1.0f0,
         macaque =     5.0f0,
     )[pred_keys],
+    #= Predator carrying-capacity scaling as function of neighbour densities and landcover.
+    Assumptions (Refs: Smucker et al 2000 — Hawaii cats, rats, mice):
+      1. Cats suppress rodents; black rats more than norway rats (size selection >250 g)
+      2. Cats live near people — density ~2 orders of magnitude higher in urban cells
+      3. Black rats live anywhere but are outcompeted by norway rats in cities / near cats
+      4. Norway rats dominate urban/coastal; lose in forest (bad climbers, less efficient)
+      5. Mice outcompete rats in farmland, coexist in urban areas
+      6. Pigs are largely independent of other predators
+    =#
     pred_funcs = (;
         cat =        p -> 2.0f0p.black_rat + 0.5f0p.norway_rat + 10f0p.urban + 2f0p.cleared,
         black_rat  = p -> -0.2f0p.cat - 0.1f0p.norway_rat + 0.5f0p.native + 0.3f0p.abandoned + 0.3f0p.forestry + 1p.urban,
         norway_rat = p -> -0.1f0p.cat - 0.1f0p.black_rat + 1.5f0p.urban - 0.2f0p.native,
         mouse =      p -> -0.3f0p.cat - 0.2f0p.black_rat - 0.2f0p.norway_rat + 0.8f0p.cleared + 1.5f0p.urban,
-    )[pred_keys]
+    )[pred_keys],
 )
-    pred_df = filter(r -> Symbol(r.name) in pred_keys, pred_df)
-    moore = Moore{3}()
-
-    #= Assumptions
-    1. cats suppress rodents to some extent, black rats more than norway rats (size selection - norway rats are above 250g)
-    2. cats live near people with maybe 2 orders of magnitude higher density than far from people
-    3. black rats live anywhere including forest (they're efficient and good climbers), but are outcompeted by norway rats in cities and/or in the presence of cats
-    4. norway rats could live everywhere but lose in the forest in competition with black rats, because theyre bad climbers and are less efficient in feeding/metabolism overall. They dominate in coastal areas because theyre better around water, and in high resource conditions because they're bigger.
-    5. mice are also implicated in bird deaths, just to make things worse... they outcompete rats in farmland but not forests, and coexist in urban areas.
-    6. pigs probably don't care about any of these things and just go wherever they like.
-    =#
-
-    # These parameters are from qualitative and quantitative literature without
-    # enough context to use the numbers precisely.
-    # Refs: Smucker et al 2000 - Hawaii cats, rats, mice
-
-    island_endemic_traits = endemic_traits(island_endemic_tables, EndemicNVs)
-
-    kernel = DispersalKernel(
-        stencil=moore,
-        formulation=ExponentialKernel(Param(1.0f0, bounds=(0.0f0, 2.0f0))),
-        cellsize=1.0f0,
-    )
-    stencil_masks = map(auxs) do aux
-        StencilArray(aux.mask, kernel; padding=Halo{:out}())
-    end
-    stencil_dems = map(auxs) do aux
-        StencilArray(aux.dem, moore; padding=Halo{:out}())
-    end
-
-    PredNV = NamedVector{pred_keys,length(pred_keys)}
-    pred_names = PredNV(pred_keys)
+    pred_df    = filter(r -> Symbol(r.name) in pred_keys, pred_df)
+    PredNV     = NamedVector{pred_keys,length(pred_keys)}
+    pred_rmax  = Float32.(PredNV(pred_df.rmax))
     pred_indices = PredNV(ntuple(identity, length(pred_keys)))
-    island_names = NamedTuple{keys(auxs)}(keys(auxs))
     pred_init_nvs = map(pred_indices) do i
         x = zeros(Float16, length(pred_keys))
         x[i] = 50 * aggfactor
         PredNV(x)
     end
 
-    introductions = map(island_names) do key
-        island_df = filter(r -> r.island == string(key) && Symbol(r.species) in pred_keys, introductions_df)
-        display(island_df)
-        map(eachrow(island_df)) do r
-            init = pred_init_nvs[Symbol(r.species)]
-            (; year=r.year, geometry=(X=r.lon, Y=r.lat), init)
-        end
+    moore  = Moore{3}()
+    kernel = DispersalKernel(
+        stencil=moore,
+        formulation=ExponentialKernel(Param(1.0f0, bounds=(0.0f0, 2.0f0))),
+        cellsize=1.0f0,
+    )
+    pred_kernels = map(spread_rate) do s
+        DispersalKernel(stencil=moore, formulation=ExponentialKernel(s), cellsize=1.0f0)
     end
 
-    pred_rmax = Float32.(PredNV(pred_df.rmax))
-    pred_max_density = Float32.(PredNV(pred_df.max_density))
-    pred_pops = map(auxs) do aux
-        map(_ -> map(_ -> 0.0f0, pred_rmax), aux.mask)
-    end
-    pred_carrycaps = map(auxs) do aux
-        map(_ -> carrycap, aux.mask)
-    end
-
-    # Rules
     pred_carrycap_rule = InteractiveCarryCap{:pred_pop,:pred_carrycap}(;
         carrycap,
         carrycap_scaling=map(Val, pred_funcs),
         inputs=Aux{:landcover}(),
     )
-
     pred_growth_rule = LogisticGrowth{:pred_pop}(;
         rate=pred_rmax,
         carrycap=DynamicGrids.Grid{:pred_carrycap}(),
         timestep=1,
         nsteps_type=Float32,
     )
-
-    # Every species is everywhere initially, in this dumb model
-    endemic_presences = map(auxs, island_endemic_traits) do aux, traits
-        map(aux.mask) do m
-            map(_ -> m, traits.ismammal) # traits.ismammal is used only as a shape source
-        end
-    end
-    island_causes = map(auxs, island_endemic_traits) do aux, traits
-        map(aux.mask) do m
-            map(_ -> zero(pred_rmax), traits.ismammal)
-        end
-    end
-
     introduction_rule = let introductions_aux=Aux{:introductions}()
         SetGrid{:pred_pop}() do data, pred_pop, t
             D = dims(DG.init(data).pred_pop)
@@ -327,20 +259,11 @@ function define_simulations(
             end
         end
     end
-
     clearing_rule = let landcover=Aux{:landcover}()
         Cell{:endemic_presence}() do data, presences, I
             lc = get(data, landcover, I)
             presences .& (lc.native > CLEARING_NATIVE_THRESHOLD)
         end
-    end
-
-    pred_kernels = map(spread_rate) do s
-        DispersalKernel(
-            stencil=moore,
-            formulation=ExponentialKernel(s),
-            cellsize=1.0f0,
-        )
     end
     pred_spread_rule = let demaux=Aux{:dem}(), aggfactor=aggfactor, pred_kernels=pred_kernels, carrycap=carrycap
         SetNeighbors{Tuple{:pred_pop,:pred_carrycap}}(pred_kernels[1]) do data, hood, (Ns, _), I
@@ -361,7 +284,6 @@ function define_simulations(
             # Randomise hood starting position to avoid directional artifacts in output
             start = rand(0:length(hood)-1)
             @inbounds for ix in eachindex(hood)
-                # Rotate indices in relation to starting point
                 i = start + ix
                 if i > length(hood)
                     i = i - length(hood)
@@ -374,7 +296,6 @@ function define_simulations(
                 e = elev_nbrs[i]
                 propagules = trunc.(Float32.(Ns .* sp .* rand(typeof(Ns)) .^ PROPAGULE_SKEW_EXPONENT .* ks .* PROPAGULE_SPREAD_SCALE))
                 sum1 = sum + propagules
-                # If we run out of propagules
                 if any(sum1 .> Ns)
                     propagules = min.(sum1, Ns) .- sum
                     sum = sum + propagules
@@ -386,8 +307,7 @@ function define_simulations(
             @inbounds sub!(data[:pred_pop], sum, I...)
             return nothing
         end
-    end # let
-
+    end
     risks_rule = ExtirpationRisks{Tuple{:endemic_presence,:causes}}(;
         f=tanh,
         stencil=Moore(1),
@@ -400,7 +320,6 @@ function define_simulations(
         stochastic_extirpation=BASE_STOCHASTIC_EXTIRPATION/aggfactor,
         recuperation_rates=Aux{:recuperation_rates}(),
     )
-
     aux_pred_risks_rule = ExtirpationRisks{:endemic_presence,:causes}(;
         f=tanh,
         stencil=Moore(1),
@@ -414,93 +333,173 @@ function define_simulations(
         recuperation_rates=Aux{:recuperation_rates}(),
     )
 
-    tspans = map(introductions) do intros
-        first_year:last_year
-    end
-    inits = map(pred_pops, pred_carrycaps, endemic_presences, island_causes) do pred_pop, pred_carrycap, endemic_presence, causes
-        (; pred_pop, pred_carrycap, endemic_presence, causes)
-    end
-    pred_inits = map(pred_pops, pred_carrycaps) do pred_pop, pred_carrycap
-        (; pred_pop, pred_carrycap)
-    end
-    endemic_inits = map(endemic_presences) do endemic_presence
-        (; endemic_presence)
-    end
-
     pred_ruleset = Ruleset(
-        pred_carrycap_rule,
-        introduction_rule,
-        pred_spread_rule,
-        pred_growth_rule;
+        pred_carrycap_rule, introduction_rule, pred_spread_rule, pred_growth_rule;
         boundary=Remove()
     )
-
-    endemic_ruleset = Ruleset(
-        Chain(aux_pred_risks_rule, clearing_rule);
-        boundary=Remove()
-    )
-
+    endemic_ruleset = Ruleset(Chain(aux_pred_risks_rule, clearing_rule); boundary=Remove())
     ruleset = Ruleset(
-        DynamicGrids.rules(pred_ruleset)...,
-        risks_rule,
-        clearing_rule;
+        DynamicGrids.rules(pred_ruleset)..., risks_rule, clearing_rule;
         boundary=Remove()
     )
-
     rules = (;
-        introduction_rule,
-        pred_carrycap_rule,
-        pred_spread_rule,
-        pred_growth_rule,
-        risks_rule,
-        aux_pred_risks_rule,
-        clearing_rule,
+        introduction_rule, pred_carrycap_rule, pred_spread_rule, pred_growth_rule,
+        risks_rule, aux_pred_risks_rule, clearing_rule,
     )
 
-    pred_effects = map(pred_pops_aux, island_mass_response, island_endemic_traits) do pred_pop, mass_response, traits
+    return (;
+        ruleset, pred_ruleset, endemic_ruleset, rules,
+        pred_rmax, carrycap, PredNV, pred_keys, pred_init_nvs, pred_kernels,
+        pred_response, mean_prey_mass, aggfactor, aggscale, moore, kernel, risks_rule,
+    )
+end
+
+# ---------------------------------------------------------------------------
+# build_island — per-island init arrays, outputs, and aux data
+# ---------------------------------------------------------------------------
+
+function build_island(key, endemic_table, aux, introductions_df, shared;
+    first_year, last_year, extant_extension, replicates,
+    pred_pops_aux = nothing,
+    EndemicNV = begin
+        ek = Tuple(Symbol.(replace.(endemic_table.Species, Ref(' ' => '_'))))
+        NamedVector{ek,length(ek)}
+    end,
+    # Extinction date defaults: start year of the recorded range, or last_year+extension
+    extinction_dates = map(endemic_table[!, Symbol(key, :_extinct)]) do x
+        ismissing(x) ? last_year + extant_extension : parse(Int, first(split(string(x), ':')))
+    end |> EndemicNV,
+    mass_response = begin
+        endemic_mass = EndemicNV(endemic_table.Mass)
+        map(shared.mean_prey_mass) do (mean, std)
+            dist = Distributions.Normal(mean, 2std) # Doubled to account for distribution skew
+            scalar = 1 / pdf(dist, mean)
+            map(endemic_mass) do pm; pdf(dist, pm) * scalar end
+        end
+    end,
+    recuperation_rates = Float32.(ones(EndemicNV) .* 1.0), # TODO: derive from literature
+)
+    (; pred_rmax, carrycap, PredNV, pred_keys, pred_init_nvs, pred_kernels,
+       pred_response, aggfactor, moore, kernel, risks_rule) = shared
+
+    stencil_mask = StencilArray(aux.mask, kernel; padding=Halo{:out}())
+    stencil_dem  = StencilArray(aux.dem, moore; padding=Halo{:out}())
+
+    traits = endemic_traits(endemic_table, EndemicNV)
+
+    island_df = filter(r -> r.island == string(key) && Symbol(r.species) in pred_keys, introductions_df)
+    display(island_df)
+    island_introductions = map(eachrow(island_df)) do r
+        (; year=r.year, geometry=(X=r.lon, Y=r.lat), init=pred_init_nvs[Symbol(r.species)])
+    end
+
+    pred_pop      = map(_ -> map(_ -> 0.0f0, pred_rmax), aux.mask)
+    pred_carrycap = map(_ -> carrycap, aux.mask)
+    # Every endemic species is present everywhere initially
+    endemic_presence = map(aux.mask) do m
+        map(_ -> m, traits.ismammal) # ismammal used only as a shape template
+    end
+    causes = map(aux.mask) do m
+        map(_ -> zero(pred_rmax), traits.ismammal)
+    end
+
+    pred_effect = if isnothing(pred_pops_aux)
+        nothing
+    else
         pr = ModelParameters.stripparams(pred_response)
         pred_suscept = predator_susceptibility(pr, traits)
-        isnothing(pred_pop) ? nothing : generate_predator_effect(risks_rule.f, pred_pop, pred_suscept)
+        generate_predator_effect(risks_rule.f, pred_pops_aux, pred_suscept)
     end
 
-    outputs_kw = map(
-        island_names, tspans, auxs, pred_pops_aux, island_endemic_traits, pred_effects, island_recuperation_rates
-    ) do island, tspan, aux1, pred_pop, endemic_traits, pred_effect, recuperation_rates
-        aux = (;
-            introductions=getproperty(introductions, island),
-            dem=getproperty(stencil_dems, island),
+    init         = (; pred_pop, pred_carrycap, endemic_presence, causes)
+    pred_init    = (; pred_pop, pred_carrycap)
+    endemic_init = (; endemic_presence)
+    tspan        = first_year:last_year
+
+    output_kw = (;
+        aux=(;
+            introductions = island_introductions,
+            dem           = stencil_dem,
             recuperation_rates,
-            pred_pop,
-            endemic_traits,
+            pred_pop      = pred_pops_aux,
+            endemic_traits = traits,
             pred_effect,
-            landcover=aux1.lc
-        )
-        (; aux, mask=getproperty(stencil_masks, island), replicates, tspan)
-    end
-    outputs = map(inits, outputs_kw) do init, kw
-        ResultOutput(init; kw...)
-    end
-    pred_outputs = map(pred_inits, outputs_kw) do init, kw
-        if isnothing(replicates)
-            trans_output = TransformedOutput(init; kw...) do f
-                Array(f.pred_pop)
-            end
-        else
-            ResultOutput(init; kw...)
+            landcover     = aux.lc,
+        ),
+        mask = stencil_mask,
+        replicates,
+        tspan,
+    )
+
+    output = ResultOutput(init; output_kw...)
+    pred_output = if isnothing(replicates)
+        TransformedOutput(pred_init; output_kw...) do f
+            Array(f.pred_pop)
         end
+    else
+        ResultOutput(pred_init; output_kw...)
     end
-    endemic_outputs = map(endemic_inits, outputs_kw) do init, kw
-        ResultOutput(init; kw...)
-    end
-    outputs = map(inits, outputs_kw) do init, kw
-        ResultOutput(init; kw...)
+    endemic_output = ResultOutput(endemic_init; output_kw...)
+
+    return (; key, init, endemic_init, pred_init, output, endemic_output, pred_output,
+              output_kw, aux, mass_response, extinction_dates)
+end
+
+# ---------------------------------------------------------------------------
+# define_simulations — thin coordinator: calls build_rules then build_island
+# ---------------------------------------------------------------------------
+
+function define_simulations(
+    pred_df, introductions_df, island_endemic_tables, auxs, aggfactor;
+    aggscale     = aggfactor^2,
+    replicates   = nothing,
+    pred_pops_aux,
+    island_keys  = NamedTuple{keys(island_endemic_tables)}(keys(island_endemic_tables)),
+    first_year, last_year, extant_extension,
+    pred_keys    = (:cat, :black_rat, :norway_rat, :mouse, :pig, :wolf_snake, :macaque),
+    pred_response = predator_response_params(pred_keys),
+    mean_prey_mass = (;
+        cat =        (41.0, 51.0),
+        black_rat =  (10.0, 10.0),
+        norway_rat = (8.0,  8.0),
+        mouse =      (3.0,  5.0),
+        pig =        (100.0, 100.0),
+        wolf_snake = (9.0,  7.0),
+        macaque =    (40.0, 40.0),
+    )[pred_keys],
+    carrycap = Float32.(NV(;
+        cat =        0.01,
+        black_rat =  30.0,
+        norway_rat = 15.0,
+        mouse =      52.0,
+        pig =        0.02,
+        wolf_snake = 10.0,
+        macaque =    0.5,
+    ) .* aggscale)[pred_keys],
+    spread_rate = NV(;
+        cat =        20.0f0,
+        black_rat =   1.0f0,
+        norway_rat =  1.0f0,
+        mouse =       0.5f0,
+        pig =        100.0f0,
+        wolf_snake =  1.0f0,
+        macaque =     5.0f0,
+    )[pred_keys],
+    pred_funcs = (;
+        cat =        p -> 2.0f0p.black_rat + 0.5f0p.norway_rat + 10f0p.urban + 2f0p.cleared,
+        black_rat  = p -> -0.2f0p.cat - 0.1f0p.norway_rat + 0.5f0p.native + 0.3f0p.abandoned + 0.3f0p.forestry + 1p.urban,
+        norway_rat = p -> -0.1f0p.cat - 0.1f0p.black_rat + 1.5f0p.urban - 0.2f0p.native,
+        mouse =      p -> -0.3f0p.cat - 0.2f0p.black_rat - 0.2f0p.norway_rat + 0.8f0p.cleared + 1.5f0p.urban,
+    )[pred_keys],
+)
+    shared = build_rules(pred_df, aggfactor;
+        aggscale, pred_keys, pred_response, mean_prey_mass, carrycap, spread_rate, pred_funcs)
+
+    islands = map(island_keys, island_endemic_tables, auxs, pred_pops_aux) do key, table, aux, ppa
+        build_island(key, table, aux, introductions_df, shared;
+            first_year, last_year, extant_extension, replicates, pred_pops_aux=ppa)
     end
 
-    islands = map(
-        island_keys, inits, endemic_inits, pred_inits, outputs, endemic_outputs, pred_outputs, outputs_kw, auxs, island_mass_response, island_extinction_dates
-    ) do key, init, endemic_init, pred_init, output, endemic_output, pred_output, output_kw, aux, mass_response, extinction_dates
-        (; key, init, endemic_init, pred_init, output, endemic_output, pred_output, output_kw, aux, mass_response, extinction_dates)
-    end
-
-    return (; ruleset, rules, pred_ruleset, endemic_ruleset, islands, pred_response)
+    return (; shared.ruleset, shared.rules, shared.pred_ruleset, shared.endemic_ruleset,
+              islands, shared.pred_response)
 end
