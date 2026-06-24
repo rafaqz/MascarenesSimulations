@@ -29,10 +29,21 @@ landcover_paths = (
     rod=joinpath(basepath, "data/lc_predictions_rod.nc"),
 )
 
+# Raster data corrections: pixels incorrectly included in island masks.
+# Each entry names an island and a tuple of DimensionalData selectors.
+# Verify coordinates against source data if the underlying rasters are ever reprocessed.
+mask_patches = (
+    # Rodrigues: two small islets outside the main island, outside the simulation domain
+    (; island=:rod, dims=(X(Between(60.0, 63.33)), Y(Between(-19.775, -19.675)))),
+    (; island=:rod, dims=(X(Between(63.0,  65.0)),  Y(Between(-19.8,   -19.775)))),
+    # Mauritius: single-row artefact from SRTM tile join
+    (; island=:mus, dims=(Y(Between(-19.985, -19.0)),)),
+)
+
 # Load data
 (; pred_df, introductions_df, island_names, island_endemic_names, island_tables, island_endemic_tables) = load_tables()
 (; borders, masks, elevation, dems) = load_rasters()
-auxs = load_aux(; masks, dems, landcover_paths, aggfactor, last_year)
+auxs = load_aux(; masks, dems, landcover_paths, aggfactor, last_year, mask_patches)
 
 # Run full invasive/endemic simulations
 

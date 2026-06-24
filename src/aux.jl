@@ -1,14 +1,25 @@
 
 # Build auxiliary rasters
 
-function load_aux(; masks, dems, landcover_paths, aggfactor, last_year)
+# Apply boolean mask corrections passed in as data.
+# Each patch is a NamedTuple with:
+#   island :: Symbol          — key into the masks NamedTuple
+#   dims   :: Tuple           — DimensionalData selectors (e.g. X(Between(a,b)))
+# Cells matching all selectors are set to false (excluded from simulation).
+function apply_mask_patches!(masks, patches)
+    for patch in patches
+        view(getproperty(masks, patch.island), patch.dims...) .= false
+    end
+    return masks
+end
+
+function load_aux(; masks, dems, landcover_paths, aggfactor, last_year, mask_patches=())
     sim_setup_file = joinpath(basepath, "cache/sim_setup_$aggfactor.jld2")
     auxs = if isfile(sim_setup_file)
         println("Loading aux data from jld...")
         let
             f = jldopen(sim_setup_file, "r")
-            # pred_pops_aux = f["pred_pops_aux"];
-            auxs = f["auxs"];
+            auxs = f["auxs"]
             close(f)
             auxs
         end
@@ -16,27 +27,20 @@ function load_aux(; masks, dems, landcover_paths, aggfactor, last_year)
         let
             # netcdf has the annoying center locus for time
             lc_predictions = map(landcover_paths) do path
-                lc_predictions = RasterStack(path) |>
+                RasterStack(path) |>
                     x -> maybeshiftlocus(Start(), x) |>
                     x -> DD.set(x, Ti => Int.(lookup(x, Ti))) |>
                     x -> rebuild(Rasters.modify(BitArray, x); missingval=false)
             end
-            # # Remove islands of rodrigues
-            masks.rod[X=60 .. 63.33, Y=-19.775 .. -19.675] .= false
-            masks.rod[X=63 .. 65, Y= -19.8 .. -19.775] .= false
-            # And one pixel in Muaritius that creates a bug, false the whole row
-            masks.mus[Y = -19.985 .. -19] .= false
-            # Makie.plot(masks.mus)
+            apply_mask_patches!(masks, mask_patches)
             auxs = agg_aux(masks, dems, lc_predictions, aggfactor, last_year)
-            jldsave(sim_setup_file;
-                auxs#, pred_pops_aux,
-            );
+            jldsave(sim_setup_file; auxs)
             auxs
         end
     end
 end
 
-# Merge landcover to a single layer for makie visualisation
+# Merge landcover to a single integer layer for Makie visualisation.
 function graphic_landcover(auxs)
     map(auxs) do aux
         map(aux.lc) do lcs
